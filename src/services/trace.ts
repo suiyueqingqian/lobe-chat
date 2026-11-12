@@ -1,10 +1,10 @@
 import { API_ENDPOINTS } from '@/services/_url';
 import { useUserStore } from '@/store/user';
-import { preferenceSelectors } from '@/store/user/selectors';
-import { TraceEventBasePayload, TraceEventPayloads } from '@/types/trace';
+import { userGeneralSettingsSelectors } from '@/store/user/selectors';
+import { type TraceEventBasePayload, type TraceEventPayloads } from '@/types/trace';
 
 class TraceService {
-  private async request<T>(data: T) {
+  private request = async <T>(data: T) => {
     try {
       return fetch(API_ENDPOINTS.trace, {
         body: JSON.stringify(data),
@@ -14,15 +14,15 @@ class TraceService {
     } catch (e) {
       console.error(e);
     }
-  }
+  };
 
-  async traceEvent(data: TraceEventPayloads & TraceEventBasePayload) {
-    const enabled = preferenceSelectors.userAllowTrace(useUserStore.getState());
+  traceEvent = async (data: TraceEventPayloads & TraceEventBasePayload) => {
+    const enabled = userGeneralSettingsSelectors.telemetry(useUserStore.getState());
 
     if (!enabled) return;
 
     return this.request(data);
-  }
+  };
 }
 
 export const traceService = new TraceService();

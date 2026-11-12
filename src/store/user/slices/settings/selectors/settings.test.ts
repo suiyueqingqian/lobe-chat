@@ -1,4 +1,7 @@
-import { UserStore } from '../../../store';
+import { type HotkeyId } from '@/types/hotkey';
+import { type GlobalLLMProviderKey } from '@/types/user/settings';
+
+import { type UserStore } from '../../../store';
 import { settingsSelectors } from './settings';
 
 describe('settingsSelectors', () => {
@@ -20,7 +23,6 @@ describe('settingsSelectors', () => {
               params: {},
               tts: {
                 showAllLocaleVoice: false,
-                sttLocale: 'auto',
                 ttsService: 'openai',
                 voice: {
                   openai: 'alloy',
@@ -34,11 +36,8 @@ describe('settingsSelectors', () => {
           },
           tts: {
             openAI: {
-              sttModel: 'whisper-1',
               ttsModel: 'tts-1',
             },
-            sttAutoStop: true,
-            sttServer: 'openai',
           },
           languageModel: {
             openAI: {
@@ -103,9 +102,8 @@ describe('settingsSelectors', () => {
       const s = {
         settings: {
           tts: {
-            sttAutoStop: false,
             openAI: {
-              sttModel: 'whisper-2',
+              ttsModel: 'tts-1-hd',
             },
           },
         },
@@ -117,40 +115,131 @@ describe('settingsSelectors', () => {
     });
   });
 
-  describe('dalleConfig', () => {
-    it('should return the dalle configuration', () => {
+  describe('getProviderConfigById', () => {
+    it('should return the provider config for a given provider id', () => {
+      const providerConfig = {
+        OPENAI_API_KEY: 'test-key',
+        endpoint: 'https://test-endpoint.com',
+      };
+
       const s = {
         settings: {
-          tool: {
-            dalle: {
-              apiKey: 'dalle-api-key',
-              autoGenerate: true,
+          languageModel: {
+            openAI: providerConfig,
+          },
+        },
+      } as unknown as UserStore;
+
+      const result = settingsSelectors.providerConfig('openAI')(s);
+
+      expect(result).toEqual(providerConfig);
+    });
+
+    it('should return undefined if provider does not exist', () => {
+      const s = {
+        settings: {
+          languageModel: {},
+        },
+      } as unknown as UserStore;
+
+      const result = settingsSelectors.providerConfig(
+        'nonExistentProvider' as GlobalLLMProviderKey,
+      )(s);
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe('defaultAgentConfig', () => {
+    it('should merge DEFAULT_AGENT_CONFIG and defaultAgent(s).config correctly', () => {
+      const s = {
+        settings: {
+          defaultAgent: {
+            config: {
+              systemRole: 'custom role',
+              model: 'gpt-4',
+              params: {
+                temperature: 0.7,
+              },
             },
           },
         },
       } as unknown as UserStore;
 
-      const result = settingsSelectors.dalleConfig(s);
+      const result = settingsSelectors.defaultAgentConfig(s);
 
       expect(result).toMatchSnapshot();
     });
   });
 
-  describe('isDalleAutoGenerating', () => {
-    it('should return the autoGenerate flag from dalle configuration', () => {
+  describe('exportSettings', () => {
+    it('should return the current settings', () => {
+      const s = {
+        defaultSettings: {
+          fontSize: 16,
+        },
+        settings: {
+          fontSize: 14,
+          language: 'en-US',
+        },
+      } as unknown as UserStore;
+
+      const result = settingsSelectors.exportSettings(s);
+
+      expect(result).toEqual({
+        fontSize: 14,
+        language: 'en-US',
+      });
+    });
+  });
+
+  describe('currentSystemAgent', () => {
+    it('should merge DEFAULT_SYSTEM_AGENT_CONFIG and s.settings.systemAgent correctly', () => {
       const s = {
         settings: {
-          tool: {
-            dalle: {
-              autoGenerate: true,
-            },
+          systemAgent: {
+            enableAutoReply: true,
+            replyMessage: 'Custom auto reply',
           },
         },
       } as unknown as UserStore;
 
-      const result = settingsSelectors.isDalleAutoGenerating(s);
+      const result = settingsSelectors.currentSystemAgent(s);
 
-      expect(result).toBe(true);
+      expect(result).toMatchSnapshot();
+    });
+  });
+
+  describe('getHotkeyById', () => {
+    it('should return the hotkey config for a given id', () => {
+      const hotkeyConfig = {
+        hotkey: 'ctrl+shift+f',
+        scope: 'global',
+      };
+
+      const s = {
+        settings: {
+          hotkey: {
+            newChat: hotkeyConfig,
+          },
+        },
+      } as unknown as UserStore;
+
+      const result = settingsSelectors.getHotkeyById('newChat' as HotkeyId)(s);
+
+      expect(result).toMatchSnapshot();
+    });
+
+    it('should return default hotkey if not defined in settings', () => {
+      const s = {
+        settings: {
+          hotkey: {},
+        },
+      } as unknown as UserStore;
+
+      const result = settingsSelectors.getHotkeyById('newChat' as HotkeyId)(s);
+
+      expect(result).toMatchSnapshot();
     });
   });
 });

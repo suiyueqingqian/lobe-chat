@@ -1,33 +1,40 @@
-import STT from '../STT';
+import VoiceDictation from '../Dictation';
+import VoiceMessage from '../VoiceMessage';
+import AgentMode from './AgentMode';
 import Clear from './Clear';
-import FileUpload from './FileUpload';
 import History from './History';
-import ModelSwitch from './ModelSwitch';
-import Temperature from './Temperature';
-import Token from './Token';
+import Memory from './Memory';
+import Mention from './Mention';
+import Model from './Model';
+import Params from './Params';
+import Plus from './Plus';
+import PromptTransform from './PromptTransform';
+import Search from './Search';
+import ContextWindow from './Token';
 import Tools from './Tools';
+import Typo from './Typo';
+import Upload from './Upload';
 
 export const actionMap = {
+  agentMode: AgentMode,
   clear: Clear,
-  fileUpload: FileUpload,
+  contextWindow: ContextWindow,
+  fileUpload: Upload,
+  plus: Plus,
   history: History,
-  model: ModelSwitch,
-  stt: STT,
-  temperature: Temperature,
-  token: Token,
+  memory: Memory,
+  mention: Mention,
+  model: Model,
+  params: Params,
+  promptTransform: PromptTransform,
+  search: Search,
+  temperature: Params,
   tools: Tools,
+  typo: Typo,
+  voiceDictation: VoiceDictation,
+  voiceMessage: VoiceMessage,
 } as const;
 
-type ActionMap = typeof actionMap;
+export type ActionKey = keyof typeof actionMap;
 
-export type ActionKeys = keyof ActionMap;
-
-type getActionList = (mobile?: boolean) => ActionKeys[];
-
-// we can make these action lists configurable in the future
-export const getLeftActionList: getActionList = (mobile) =>
-  ['model', 'fileUpload', 'temperature', 'history', !mobile && 'stt', 'tools', 'token'].filter(
-    Boolean,
-  ) as ActionKeys[];
-
-export const getRightActionList: getActionList = () => ['clear'].filter(Boolean) as ActionKeys[];
+export type ActionKeys = ActionKey | ActionKey[] | '---';

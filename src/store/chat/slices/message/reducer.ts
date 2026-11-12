@@ -1,31 +1,43 @@
+import {
+  type ChatMessageExtra,
+  type ChatToolPayload,
+  type CreateMessageParams,
+  type MessagePluginItem,
+  type UIChatMessage,
+} from '@lobechat/types';
 import isEqual from 'fast-deep-equal';
-import { produce } from 'immer';
+import i18n from 'i18next';
+import { current, isDraft, produce } from 'immer';
 
-import { CreateMessageParams } from '@/services/message';
-import { ChatMessage } from '@/types/message';
 import { merge } from '@/utils/merge';
+
+interface UpdateMessages {
+  type: 'updateMessages';
+  value: UIChatMessage[];
+}
 
 interface UpdateMessage {
   id: string;
-  key: keyof ChatMessage;
   type: 'updateMessage';
-  value: ChatMessage[keyof ChatMessage];
-}
-
-interface UpdateMessages {
-  id: string;
-  type: 'updateMessages';
-  value: Partial<ChatMessage>;
+  value: Partial<UIChatMessage>;
 }
 
 interface CreateMessage {
+  /** Creation time to keep, e.g. the server's; defaults to the client clock. */
+  createdAt?: number;
   id: string;
   type: 'createMessage';
   value: CreateMessageParams;
 }
+
 interface DeleteMessage {
   id: string;
   type: 'deleteMessage';
+}
+
+interface DeleteMessages {
+  ids: string[];
+  type: 'deleteMessages';
 }
 
 interface UpdatePluginState {
@@ -34,6 +46,38 @@ interface UpdatePluginState {
   type: 'updatePluginState';
   value: any;
 }
+
+interface ReplaceMessagePluginState {
+  id: string;
+  metadata?: Partial<NonNullable<UIChatMessage['metadata']>>;
+  type: 'replaceMessagePluginState';
+  value: UIChatMessage['pluginState'];
+}
+
+interface UpdateMessagePlugin {
+  id: string;
+  type: 'updateMessagePlugin';
+  value: Partial<MessagePluginItem>;
+}
+
+interface UpdateMessageTools {
+  id: string;
+  tool_call_id: string;
+  type: 'updateMessageTools';
+  value: Partial<ChatToolPayload>;
+}
+
+interface AddMessageTool {
+  id: string;
+  type: 'addMessageTool';
+  value: ChatToolPayload;
+}
+interface DeleteMessageTool {
+  id: string;
+  tool_call_id: string;
+  type: 'deleteMessageTool';
+}
+
 interface UpdateMessageExtra {
   id: string;
   key: string;
@@ -41,34 +85,59 @@ interface UpdateMessageExtra {
   value: any;
 }
 
+interface UpdateMessageMetadata {
+  id: string;
+  type: 'updateMessageMetadata';
+  value: Partial<UIChatMessage['metadata']>;
+}
+
 export type MessageDispatch =
   | CreateMessage
   | UpdateMessage
   | UpdateMessages
   | UpdatePluginState
+  | ReplaceMessagePluginState
   | UpdateMessageExtra
-  | DeleteMessage;
+  | UpdateMessageMetadata
+  | DeleteMessage
+  | UpdateMessagePlugin
+  | UpdateMessageTools
+  | AddMessageTool
+  | DeleteMessageTool
+  | DeleteMessages;
 
-export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch): ChatMessage[] => {
+const getComparablePluginState = (pluginState: UIChatMessage['pluginState']) => {
+  if (!pluginState) return pluginState;
+
+  // Comparing an Immer draft directly can treat { existing: true } -> { existing: true } as changed.
+  return isDraft(pluginState) ? current(pluginState) : pluginState;
+};
+
+export const messagesReducer = (
+  state: UIChatMessage[],
+  payload: MessageDispatch,
+): UIChatMessage[] => {
   switch (payload.type) {
     case 'updateMessage': {
       return produce(state, (draftState) => {
-        const { id, key, value } = payload;
-        const message = draftState.find((i) => i.id === id);
-        if (!message) return;
+        const { id, value } = payload;
 
-        // @ts-ignore
-        message[key] = value;
-        message.updatedAt = Date.now();
+        const index = draftState.findIndex((i) => i.id === id);
+        if (index >= 0) {
+          draftState[index] = merge(draftState[index], { ...value, updatedAt: Date.now() });
+        }
       });
     }
-    case 'updateMessages': {
-      return produce(state, (draftState) => {
-        const { id, value } = payload;
-        const index = draftState.findIndex((i) => i.id === id);
-        if (index < 0) return;
 
-        draftState[index] = merge(draftState[index], { ...value, updatedAt: Date.now() });
+    case 'replaceMessagePluginState': {
+      return produce(state, (draftState) => {
+        const { id, metadata, value } = payload;
+        const message = draftState.find((item) => item.id === id);
+        if (!message || message.role !== 'tool') return;
+
+        message.pluginState = value;
+        if (metadata) message.metadata = merge(message.metadata, metadata);
+        message.updatedAt = Date.now();
       });
     }
 
@@ -79,11 +148,22 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
         if (!message) return;
 
         if (!message.extra) {
-          message.extra = { [key]: value } as any;
+          message.extra = { [key]: value } as ChatMessageExtra;
         } else {
-          message.extra[key] = value;
+          message.extra[key as keyof ChatMessageExtra] = value;
         }
 
+        message.updatedAt = Date.now();
+      });
+    }
+
+    case 'updateMessageMetadata': {
+      return produce(state, (draftState) => {
+        const { id, value } = payload;
+        const message = draftState.find((i) => i.id === id);
+        if (!message) return;
+
+        message.metadata = merge(message.metadata, value);
         message.updatedAt = Date.now();
       });
     }
@@ -94,16 +174,75 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
         const message = draftState.find((i) => i.id === id);
         if (!message) return;
 
+        const pluginState = getComparablePluginState(message.pluginState);
         let newState;
-        if (!message.pluginState) {
+        if (!pluginState) {
           newState = { [key]: value } as any;
         } else {
-          newState = merge(message.pluginState, { [key]: value });
+          newState = merge(pluginState, { [key]: value });
         }
 
-        if (isEqual(message.pluginState, newState)) return;
+        if (isEqual(pluginState, newState)) return;
 
         message.pluginState = newState;
+        message.updatedAt = Date.now();
+      });
+    }
+
+    case 'updateMessagePlugin': {
+      return produce(state, (draftState) => {
+        const { id, value } = payload;
+        const message = draftState.find((i) => i.id === id);
+        if (!message || message.role !== 'tool') return;
+
+        message.plugin = merge(message.plugin, value);
+        if (value.error !== undefined) message.pluginError = value.error;
+        message.updatedAt = Date.now();
+      });
+    }
+
+    case 'addMessageTool': {
+      return produce(state, (draftState) => {
+        const { id, value } = payload;
+        const message = draftState.find((i) => i.id === id);
+        if (!message || message.role !== 'assistant') return;
+
+        if (!message.tools) {
+          message.tools = [value];
+        } else {
+          const index = message.tools.findIndex((tool) => tool.id === value.id);
+
+          if (index > 0) return;
+          message.tools.push(value);
+        }
+
+        message.updatedAt = Date.now();
+      });
+    }
+
+    case 'deleteMessageTool': {
+      return produce(state, (draftState) => {
+        const { id, tool_call_id } = payload;
+        const message = draftState.find((i) => i.id === id);
+        if (!message || message.role !== 'assistant' || !message.tools) return;
+
+        message.tools = message.tools.filter((tool) => tool.id !== tool_call_id);
+
+        message.updatedAt = Date.now();
+      });
+    }
+
+    case 'updateMessageTools': {
+      return produce(state, (draftState) => {
+        const { id, value, tool_call_id } = payload;
+        const message = draftState.find((i) => i.id === id);
+        if (!message || message.role !== 'assistant' || !message.tools) return;
+
+        const index = message.tools.findIndex((tool) => tool.id === tool_call_id);
+
+        if (index < 0) return;
+        message.tools[index] = merge(message.tools[index], value);
+
         message.updatedAt = Date.now();
       });
     }
@@ -111,10 +250,16 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
     case 'createMessage': {
       return produce(state, (draftState) => {
         const { value, id } = payload;
+        const now = Date.now();
 
-        draftState.push({ ...value, createdAt: Date.now(), id, meta: {}, updatedAt: Date.now() });
+        draftState.push({ ...value, createdAt: payload.createdAt ?? now, id, updatedAt: now });
       });
     }
+
+    case 'updateMessages': {
+      return payload.value;
+    }
+
     case 'deleteMessage': {
       return produce(state, (draft) => {
         const { id } = payload;
@@ -124,8 +269,18 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
         if (index >= 0) draft.splice(index, 1);
       });
     }
+    case 'deleteMessages': {
+      return produce(state, (draft) => {
+        const { ids } = payload;
+
+        return draft.filter((item) => {
+          return !ids.includes(item.id);
+        });
+      });
+    }
+
     default: {
-      throw new Error('暂未实现的 type，请检查 reducer');
+      throw new Error(i18n.t('errors.unimplementedType', { ns: 'common' }));
     }
   }
 };

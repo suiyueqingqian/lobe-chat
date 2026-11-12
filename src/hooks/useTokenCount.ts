@@ -1,20 +1,33 @@
-import { startTransition, useEffect, useState } from 'react';
+import { debounce } from 'es-toolkit/compat';
+import { startTransition, useCallback, useEffect, useState } from 'react';
 
 import { encodeAsync } from '@/utils/tokenizer';
 
 export const useTokenCount = (input: string = '') => {
   const [value, setNum] = useState(0);
 
-  useEffect(() => {
-    startTransition(() => {
-      encodeAsync(input || '')
-        .then(setNum)
+  // The transition must wrap the setState itself — wrapping the debounce call
+  // only demotes the timer scheduling while the eventual update still lands at
+  // default priority.
+  const debouncedEncode = useCallback(
+    debounce((text: string) => {
+      encodeAsync(text)
+        .then((count) => startTransition(() => setNum(count)))
         .catch(() => {
-          // 兜底采用字符数
-          setNum(input.length);
+          startTransition(() => setNum(text.length));
         });
-    });
-  }, [input]);
+    }, 300),
+    [],
+  );
+
+  useEffect(() => {
+    debouncedEncode(input || '');
+
+    // Cleanup function
+    return () => {
+      debouncedEncode.cancel();
+    };
+  }, [input, debouncedEncode]);
 
   return value;
 };

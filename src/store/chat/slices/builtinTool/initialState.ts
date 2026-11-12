@@ -1,7 +1,5 @@
 export interface ChatToolState {
-  dalleImageLoading: Record<string, boolean>;
+  activePageContentUrl?: string;
 }
 
-export const initialToolState: ChatToolState = {
-  dalleImageLoading: {},
-};
+export const initialToolState: ChatToolState = {};

@@ -1,9 +1,9 @@
-import { useRouter } from 'next/navigation';
-import qs, { type ParsedQuery } from 'query-string';
+import { isOnServerSide } from '@lobechat/utils';
+import qs from 'query-string';
+import { type ParsedQuery } from 'query-string';
 import { useMemo } from 'react';
 
-import { useQuery } from '@/hooks/useQuery';
-import { isOnServerSide } from '@/utils/env';
+import { useWorkspaceAwareNavigate } from '@/features/Workspace/useWorkspaceAwareNavigate';
 
 interface QueryRouteOptions {
   hash?: string;
@@ -19,7 +19,10 @@ interface GenHrefOptions extends QueryRouteOptions {
 }
 
 const genHref = ({ hash, replace, url, prevQuery = {}, query = {} }: GenHrefOptions): string => {
-  let href = qs.stringifyUrl({ query: replace ? query : { ...prevQuery, ...query }, url });
+  let href = qs.stringifyUrl(
+    { query: replace ? query : { ...prevQuery, ...query }, url },
+    { skipNull: true },
+  );
 
   if (!isOnServerSide && hash) {
     href = [href, hash || location?.hash?.slice(1)].filter(Boolean).join('#');
@@ -29,18 +32,19 @@ const genHref = ({ hash, replace, url, prevQuery = {}, query = {} }: GenHrefOpti
 };
 
 export const useQueryRoute = () => {
-  const router = useRouter();
-  const prevQuery = useQuery();
+  const navigate = useWorkspaceAwareNavigate();
 
   return useMemo(
     () => ({
       push: (url: string, options: QueryRouteOptions = {}) => {
-        return router.push(genHref({ prevQuery, url, ...options }));
+        const prevQuery = qs.parse(window.location.search);
+        return navigate(genHref({ prevQuery, url, ...options }));
       },
       replace: (url: string, options: QueryRouteOptions = {}) => {
-        return router.replace(genHref({ prevQuery, url, ...options }));
+        const prevQuery = qs.parse(window.location.search);
+        return navigate(genHref({ prevQuery, url, ...options }), { replace: true });
       },
     }),
-    [prevQuery],
+    [navigate],
   );
 };

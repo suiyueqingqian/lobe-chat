@@ -1,21 +1,31 @@
-import { consola } from 'consola';
-import { colors } from 'consola/utils';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import i18nConfig from '../../.i18nrc';
+import prettier from '@prettier/sync';
+import { consola } from 'consola';
+import { colors } from 'consola/utils';
+
+import i18nConfig from './i18nConfig';
+
+const prettierOptions = prettier.resolveConfig(resolve(__dirname, '../../.prettierrc.js'));
 
 export const readJSON = (filePath: string) => {
   const data = readFileSync(filePath, 'utf8');
   return JSON.parse(data);
 };
 
-export const replaceAssistantToAgent = (text: string) =>
-  text.replaceAll('assistant', 'agent').replaceAll('Assistant', 'Agent');
-
 export const writeJSON = (filePath: string, data: any) => {
   const jsonStr = JSON.stringify(data, null, 2);
-  writeFileSync(filePath, replaceAssistantToAgent(jsonStr), 'utf8');
+  writeFileSync(filePath, jsonStr, 'utf8');
+};
+
+export const writeJSONWithPrettier = (filePath: string, data: any) => {
+  const jsonStr = JSON.stringify(data, null, 2);
+  const formatted = prettier.format(jsonStr, {
+    ...prettierOptions,
+    parser: 'json',
+  });
+  writeFileSync(filePath, formatted, 'utf8');
 };
 
 export const genResourcesContent = (locales: string[]) => {

@@ -1,0 +1,99 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
+import type { PropsWithChildren } from 'react';
+import { createElement } from 'react';
+import type { Cache } from 'swr';
+import { SWRConfig } from 'swr';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { verifyService } from '@/services/verify';
+
+import {
+  getAcceptanceBySubjectRefreshInterval,
+  useAcceptanceBySubject,
+  useAcceptanceList,
+} from './hooks';
+
+const createSWRWrapper = (cache: Cache) =>
+  function SWRTestWrapper({ children }: PropsWithChildren) {
+    return createElement(SWRConfig, { value: { provider: () => cache } }, children);
+  };
+
+describe('Verify data hooks', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('loads an acceptance by its task subject identifier', async () => {
+    const getAcceptanceBySubject = vi
+      .spyOn(verifyService, 'getAcceptanceBySubject')
+      .mockResolvedValue({ id: 'acceptance-1' } as never);
+
+    const { result } = renderHook(() => useAcceptanceBySubject('task', 'T-231'), {
+      wrapper: createSWRWrapper(new Map()),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual({ id: 'acceptance-1' }));
+    expect(getAcceptanceBySubject).toHaveBeenCalledWith('task', 'T-231');
+  });
+
+  it('keeps a subject without an acceptance out of loading while it polls', async () => {
+    const getAcceptanceBySubject = vi
+      .spyOn(verifyService, 'getAcceptanceBySubject')
+      .mockResolvedValue(null as never);
+
+    const { result } = renderHook(() => useAcceptanceBySubject('task', 'T-864'), {
+      wrapper: createSWRWrapper(new Map()),
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // A background poll of a subject known to have no acceptance must not flip
+    // the caller back to its loading placeholder on every tick.
+    let resolveNext!: (value: null) => void;
+    getAcceptanceBySubject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNext = resolve;
+      }) as never,
+    );
+    let revalidation!: Promise<unknown>;
+    act(() => {
+      revalidation = result.current.mutate();
+    });
+    await waitFor(() => expect(result.current.isValidating).toBe(true));
+    expect(result.current.isLoading).toBe(false);
+
+    await act(async () => {
+      resolveNext(null);
+      await revalidation;
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('forwards the project scope to the acceptance list service', async () => {
+    const listAcceptances = vi.spyOn(verifyService, 'listAcceptances').mockResolvedValue([]);
+
+    renderHook(() => useAcceptanceList(true, { filter: 'all', projectId: 'project-1' }), {
+      wrapper: createSWRWrapper(new Map()),
+    });
+
+    await waitFor(() => expect(listAcceptances).toHaveBeenCalledOnce());
+    expect(listAcceptances).toHaveBeenCalledWith({
+      filter: 'all',
+      limit: undefined,
+      projectId: 'project-1',
+      q: undefined,
+    });
+  });
+
+  it('polls fastest before an acceptance exists, then keeps it live until it settles', () => {
+    expect(getAcceptanceBySubjectRefreshInterval(undefined)).toBe(2000);
+    expect(getAcceptanceBySubjectRefreshInterval(null)).toBe(2000);
+    // A task page left open through a goal loop would otherwise keep rendering
+    // whatever state it first saw, all the way through delivery.
+    expect(getAcceptanceBySubjectRefreshInterval({ id: 'a1', status: 'verifying' })).toBe(5000);
+    expect(getAcceptanceBySubjectRefreshInterval({ id: 'a1', status: 'delivered' })).toBe(5000);
+    expect(getAcceptanceBySubjectRefreshInterval({ id: 'a1', status: 'accepted' })).toBe(0);
+    expect(getAcceptanceBySubjectRefreshInterval({ id: 'a1', status: 'closed' })).toBe(0);
+  });
+});

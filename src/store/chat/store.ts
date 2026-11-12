@@ -1,44 +1,111 @@
+// sort-imports-ignore
 import { subscribeWithSelector } from 'zustand/middleware';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
-import { StateCreator } from 'zustand/vanilla';
+import { type StateCreator } from 'zustand/vanilla';
 
 import { createDevtools } from '../middleware/createDevtools';
-import { ChatStoreState, initialState } from './initialState';
-import { ChatBuiltinToolAction, chatToolSlice } from './slices/builtinTool/action';
-import { ChatEnhanceAction, chatEnhance } from './slices/enchance/action';
-import { ChatMessageAction, chatMessage } from './slices/message/action';
-import { ChatPluginAction, chatPlugin } from './slices/plugin/action';
-import { ShareAction, chatShare } from './slices/share/action';
-import { ChatTopicAction, chatTopic } from './slices/topic/action';
+import { expose } from '../middleware/expose';
+import { flattenActions } from '../utils/flattenActions';
+import { type ResetableStore, ResetableStoreAction } from '../utils/resetableStore';
+import { type ChatStoreState } from './initialState';
+import { initialState } from './initialState';
+import { type ChatAgentRunAction } from './slices/agentRun/actions';
+import { chatAgentRun } from './slices/agentRun/actions';
+import { type ChatAIAgentAction } from './slices/aiAgent/actions';
+import { chatAiAgent } from './slices/aiAgent/actions';
+import { type ChatBuiltinToolAction } from './slices/builtinTool/actions';
+import { chatToolSlice } from './slices/builtinTool/actions';
+import { type ChatForwardAction, ChatForwardActionImpl } from './slices/forward/action';
+import { type ChatMessageAction } from './slices/message/actions';
+import { chatMessage } from './slices/message/actions';
+import { type OperationActions } from './slices/operation/actions';
+import { OperationActionsImpl } from './slices/operation/actions';
+import { type ChatPluginAction } from './slices/plugin/actions';
+import { chatPlugin } from './slices/plugin/actions';
+import { type ChatPortalAction } from './slices/portal/action';
+import { ChatPortalActionImpl } from './slices/portal/action';
+import { type ChatThreadAction } from './slices/thread/action';
+import { ChatThreadActionImpl } from './slices/thread/action';
+import { type ChatTopicAction } from './slices/topic/action';
+import { ChatTopicActionImpl } from './slices/topic/action';
+import { subscribeJustArchivedTopic } from './slices/topic/justArchived';
+import { type ChatTopicShareAction, ChatTopicShareActionImpl } from './slices/topic/topicShare';
+import { type ChatTranslateAction } from './slices/translate/action';
+import { ChatTranslateActionImpl } from './slices/translate/action';
+import { type VoiceMessageAction } from './slices/voiceMessage/action';
+import { VoiceMessageActionImpl } from './slices/voiceMessage/action';
 
-export interface ChatStoreAction
-  extends ChatMessageAction,
-    ChatTopicAction,
-    ShareAction,
-    ChatEnhanceAction,
-    ChatPluginAction,
-    ChatBuiltinToolAction {}
+export type ChatStoreAction = ChatMessageAction &
+  ChatForwardAction &
+  ChatThreadAction &
+  ChatAgentRunAction &
+  ChatTopicAction &
+  ChatTopicShareAction &
+  ChatTranslateAction &
+  ChatPluginAction &
+  ChatBuiltinToolAction &
+  ChatPortalAction &
+  OperationActions &
+  ChatAIAgentAction &
+  VoiceMessageAction &
+  ResetableStore;
 
 export type ChatStore = ChatStoreAction & ChatStoreState;
 
-//  ===============  聚合 createStoreFn ============ //
+//  ===============  Aggregate createStoreFn ============ //
 
-const createStore: StateCreator<ChatStore, [['zustand/devtools', never]]> = (...params) => ({
-  ...initialState,
+class ChatStoreResetAction extends ResetableStoreAction<ChatStore> {
+  protected readonly resetActionName = 'resetChatStore';
 
-  ...chatMessage(...params),
-  ...chatTopic(...params),
-  ...chatShare(...params),
-  ...chatEnhance(...params),
-  ...chatToolSlice(...params),
-  ...chatPlugin(...params),
-});
+  constructor(
+    ...[set, get, api, disposeVoiceMessages]: [
+      ...Parameters<StateCreator<ChatStore, [['zustand/devtools', never]]>>,
+      () => void,
+    ]
+  ) {
+    super(set, get, api);
+    this.beforeReset = disposeVoiceMessages;
+  }
+}
 
-//  ===============  实装 useStore ============ //
+const createStore: StateCreator<ChatStore, [['zustand/devtools', never]]> = (
+  ...params: Parameters<StateCreator<ChatStore, [['zustand/devtools', never]]>>
+) => {
+  const voiceMessageAction = new VoiceMessageActionImpl(...params);
+
+  return {
+    ...initialState,
+    ...(flattenActions<ChatStoreAction>([
+      chatMessage(...params),
+      new ChatForwardActionImpl(...params),
+      new ChatThreadActionImpl(...params),
+      chatAgentRun(...params),
+      new ChatTopicActionImpl(...params),
+      new ChatTopicShareActionImpl(...params),
+      new ChatTranslateActionImpl(...params),
+      chatToolSlice(...params),
+      chatPlugin(...params),
+      new ChatPortalActionImpl(...params),
+      new OperationActionsImpl(...params),
+      chatAiAgent(...params),
+      voiceMessageAction,
+      new ChatStoreResetAction(...params, voiceMessageAction.disposeVoiceMessages),
+    ]) as ChatStoreAction),
+    // cloud
+  } as ChatStore;
+};
+
+//  ===============  Implement useStore ============ //
 const devtools = createDevtools('chat');
 
 export const useChatStore = createWithEqualityFn<ChatStore>()(
   subscribeWithSelector(devtools(createStore)),
   shallow,
 );
+
+subscribeJustArchivedTopic(useChatStore);
+
+expose('chat', useChatStore);
+
+export const getChatStoreState = () => useChatStore.getState();

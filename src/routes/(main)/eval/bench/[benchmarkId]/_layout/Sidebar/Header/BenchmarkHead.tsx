@@ -1,0 +1,153 @@
+'use client';
+
+import { type DropdownItem } from '@lobehub/ui';
+import {
+  ActionIcon,
+  Block,
+  Center,
+  createStaticStyles,
+  cssVar,
+  DropdownMenu,
+  Skeleton,
+  stopPropagation,
+  Text,
+} from '@lobehub/ui';
+import {
+  Activity,
+  Award,
+  BarChart3,
+  ChevronsUpDownIcon,
+  Gauge,
+  LoaderPinwheel,
+  Server,
+  Target,
+  TrendingUp,
+  Trophy,
+  Volleyball,
+  Zap,
+} from 'lucide-react';
+import { memo, useCallback, useMemo } from 'react';
+
+import { benchmarkHomePath } from '@/features/LobeBench/experimentNavigation';
+import { useWorkspaceAwareNavigate } from '@/features/Workspace/useWorkspaceAwareNavigate';
+import { useEvalStore } from '@/store/eval';
+import { isLobeBenchKind } from '@/store/eval/kinds';
+
+const SYSTEM_ICONS = [
+  LoaderPinwheel,
+  Volleyball,
+  Server,
+  Target,
+  Award,
+  Trophy,
+  Activity,
+  BarChart3,
+  TrendingUp,
+  Gauge,
+  Zap,
+];
+
+const getSystemIcon = (id: string) => {
+  const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return SYSTEM_ICONS[hash % SYSTEM_ICONS.length];
+};
+
+const styles = createStaticStyles(({ css, cssVar }) => ({
+  menuIcon: css`
+    color: ${cssVar.colorTextTertiary};
+  `,
+}));
+
+const BenchmarkHead = memo<{ id: string }>(({ id }) => {
+  const navigate = useWorkspaceAwareNavigate();
+  const useFetchBenchmarks = useEvalStore((s) => s.useFetchBenchmarks);
+  useFetchBenchmarks();
+  const benchmark = useEvalStore((s) => s.benchmarkDetailMap[id]);
+  const benchmarkList = useEvalStore((s) => s.benchmarkList);
+
+  const name = benchmark?.name || benchmarkList.find((b: any) => b.id === id)?.name;
+  const Icon = useMemo(() => getSystemIcon(id), [id]);
+
+  const onLobeBench = isLobeBenchKind(benchmarkList.find((b: any) => b.id === id) ?? benchmark);
+
+  const handleClick = useCallback(() => {
+    navigate(benchmarkHomePath(id, onLobeBench));
+  }, [id, navigate, onLobeBench]);
+
+  const handleBenchmarkSwitch = useCallback(
+    (benchmarkId: string) => {
+      setTimeout(() => {
+        navigate(benchmarkHomePath(benchmarkId, onLobeBench));
+      }, 0);
+    },
+    [navigate, onLobeBench],
+  );
+
+  const menuItems = useMemo<DropdownItem[]>(() => {
+    if (!benchmarkList || benchmarkList.length === 0) return [];
+
+    // The switcher stays on one side: a Lobe Bench benchmark offers the other
+    // Lobe Bench benchmarks, an Evaluation Lab benchmark the Evaluation Lab's.
+    const sameSide = benchmarkList.filter((b: any) => isLobeBenchKind(b) === onLobeBench);
+
+    return sameSide.map((b: any) => ({
+      icon: (
+        <Center className={styles.menuIcon} style={{ minWidth: 16 }} width={16}>
+          {(() => {
+            const BIcon = getSystemIcon(b.id);
+            return <BIcon size={14} />;
+          })()}
+        </Center>
+      ),
+      key: b.id,
+      label: b.name,
+      onClick: () => handleBenchmarkSwitch(b.id),
+      style: b.id === id ? { backgroundColor: cssVar.controlItemBgActive } : {},
+    }));
+  }, [benchmarkList, handleBenchmarkSwitch, id, onLobeBench]);
+
+  return (
+    <Block
+      clickable
+      horizontal
+      align={'center'}
+      gap={8}
+      padding={2}
+      style={{ minWidth: 32, overflow: 'hidden' }}
+      variant={'borderless'}
+      onClick={handleClick}
+    >
+      <Center style={{ minWidth: 32 }} width={32}>
+        <Icon size={18} />
+      </Center>
+      {!name ? (
+        <Skeleton.Text width={80} />
+      ) : (
+        <DropdownMenu items={menuItems} placement="bottomRight">
+          <Center
+            horizontal
+            gap={4}
+            style={{ cursor: 'pointer', flex: 1, overflow: 'hidden' }}
+            onClick={stopPropagation}
+          >
+            <Text ellipsis style={{ flex: 1 }} weight={500}>
+              {name}
+            </Text>
+            <ActionIcon
+              icon={ChevronsUpDownIcon}
+              style={{ width: 24 }}
+              size={{
+                blockSize: 28,
+                size: 16,
+              }}
+            />
+          </Center>
+        </DropdownMenu>
+      )}
+    </Block>
+  );
+});
+
+BenchmarkHead.displayName = 'BenchmarkHead';
+
+export default BenchmarkHead;

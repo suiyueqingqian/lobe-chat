@@ -1,8 +1,9 @@
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { consola } from 'consola';
 import { globSync } from 'glob';
 import matter from 'gray-matter';
-import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 const fixWinPath = (path: string) => path.replaceAll('\\', '/');
 
@@ -32,10 +33,17 @@ const run = () => {
         .replaceAll('}> width', '} width')
         .replaceAll("'[https", "'https")
         .replaceAll('"[https', '"https')
-        .replaceAll(/]\(http(.*)\/>\)/g, '')
+        .replaceAll(/\]\(http(.*)\/>\)/g, '')
         .replaceAll(`\\*\\* `, '** ')
         .replaceAll(` \\*\\*`, ' **')
         .replaceAll(/\n{2,}/g, '\n\n');
+
+      if (!data?.title) {
+        const regex = /^#\s(.+)/;
+        const match = regex.exec(formatedContent.trim());
+        const title = match ? match[1] : '';
+        data.title = title;
+      }
 
       writeFileSync(post, matter.stringify(formatedContent, data));
     } catch (error) {

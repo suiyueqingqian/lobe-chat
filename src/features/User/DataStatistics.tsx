@@ -1,25 +1,25 @@
 'use client';
 
-import { Icon, Tooltip } from '@lobehub/ui';
-import { Badge } from 'antd';
-import { createStyles } from 'antd-style';
-import { isNumber } from 'lodash-es';
-import { LoaderCircle } from 'lucide-react';
-import { memo, useMemo } from 'react';
+import { type FlexboxProps } from '@lobehub/ui';
+import { Badge, createStaticStyles, cssVar, Flexbox, Spin, Tooltip } from '@lobehub/ui';
+import { isUndefined } from 'es-toolkit/compat';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox, FlexboxProps } from 'react-layout-kit';
-import useSWR from 'swr';
 
-import { messageService } from '@/services/message';
-import { sessionService } from '@/services/session';
-import { topicService } from '@/services/topic';
 import { useServerConfigStore } from '@/store/serverConfig';
+import { statsActions, statsSelectors, useStatsStore } from '@/store/stats';
+import { formatShortenNumber } from '@/utils/format';
 
-const useStyles = createStyles(({ css, token }) => ({
+const styles = createStaticStyles(({ css, cssVar }) => ({
   card: css`
-    padding: 6px 8px;
-    background: ${token.colorFillTertiary};
-    border-radius: ${token.borderRadius}px;
+    padding-block: 6px;
+    padding-inline: 8px;
+    border-radius: ${cssVar.borderRadius};
+    background: ${cssVar.colorFillTertiary};
+
+    &:hover {
+      background: ${cssVar.colorFillSecondary};
+    }
   `,
   count: css`
     font-size: 16px;
@@ -29,67 +29,40 @@ const useStyles = createStyles(({ css, token }) => ({
   title: css`
     font-size: 12px;
     line-height: 1.2;
-    color: ${token.colorTextDescription};
+    color: ${cssVar.colorTextDescription};
   `,
   today: css`
     font-size: 12px;
   `,
 }));
 
-const formatNumber = (num: any) => {
-  if (!isNumber(num)) return num;
-  // 使用Intl.NumberFormat来添加千分号
-  const formattedWithComma = new Intl.NumberFormat('en-US').format(num);
-
-  // 格式化为 K 或 M
-  if (num >= 10_000_000) {
-    return (num / 1_000_000).toFixed(1) + 'M';
-  } else if (num >= 10_000) {
-    return (num / 1000).toFixed(1) + 'K';
-  } else if (num === 0) {
-    return 0;
-  } else {
-    return formattedWithComma;
-  }
-};
-
 const DataStatistics = memo<Omit<FlexboxProps, 'children'>>(({ style, ...rest }) => {
   const mobile = useServerConfigStore((s) => s.isMobile);
-  // sessions
-  const { data: sessions, isLoading: sessionsLoading } = useSWR(
-    'count-sessions',
-    sessionService.countSessions,
-  );
-  // topics
-  const { data: topics, isLoading: topicsLoading } = useSWR(
-    'count-topics',
-    topicService.countTopics,
-  );
-  // messages
-  const { data: messages, isLoading: messagesLoading } = useSWR(
-    'count-messages',
-    messageService.countMessages,
-  );
-  const { data: messagesToday } = useSWR('today-messages', messageService.countTodayMessages);
+  statsActions.useFetchCount('agents');
+  statsActions.useFetchCount('topics');
+  statsActions.useFetchCount('messages');
+  const agents = useStatsStore(statsSelectors.count('agents'))?.count;
+  const topics = useStatsStore(statsSelectors.count('topics'))?.count;
+  const { count: messages, today: messagesToday } =
+    useStatsStore(statsSelectors.count('messages')) ?? {};
 
-  const { styles, theme } = useStyles();
   const { t } = useTranslation('common');
 
-  const loading = useMemo(() => <Icon icon={LoaderCircle} spin />, []);
+  const loading = <Spin size="middle" />;
 
   const items = [
     {
-      count: sessionsLoading ? loading : sessions,
+      count: isUndefined(agents) ? loading : agents,
       key: 'sessions',
       title: t('dataStatistics.sessions'),
     },
     {
-      count: topicsLoading ? loading : topics,
+      count: isUndefined(topics) ? loading : topics,
       key: 'topics',
       title: t('dataStatistics.topics'),
     },
     {
-      count: messagesLoading ? loading : messages,
+      count: isUndefined(messages) ? loading : messages,
       countToady: messagesToday,
       key: 'messages',
       title: t('dataStatistics.messages'),
@@ -98,9 +71,9 @@ const DataStatistics = memo<Omit<FlexboxProps, 'children'>>(({ style, ...rest })
 
   return (
     <Flexbox
+      horizontal
       align={'center'}
       gap={4}
-      horizontal
       paddingInline={8}
       style={{ marginBottom: 8, ...style }}
       width={'100%'}
@@ -111,16 +84,16 @@ const DataStatistics = memo<Omit<FlexboxProps, 'children'>>(({ style, ...rest })
           const showBadge = Boolean(item.countToady && item.countToady > 0);
           return (
             <Flexbox
+              horizontal
               align={'center'}
               className={styles.card}
               flex={showBadge && !mobile ? 2 : 1}
               gap={4}
-              horizontal
               justify={'space-between'}
               key={item.key}
             >
               <Flexbox gap={2}>
-                <div className={styles.count}>{formatNumber(item.count)}</div>
+                <div className={styles.count}>{formatShortenNumber(item.count)}</div>
                 <div className={styles.title}>{item.title}</div>
               </Flexbox>
               {showBadge && (
@@ -128,8 +101,8 @@ const DataStatistics = memo<Omit<FlexboxProps, 'children'>>(({ style, ...rest })
                   <Badge
                     count={`+${item.countToady}`}
                     style={{
-                      background: theme.colorSuccess,
-                      color: theme.colorSuccessBg,
+                      background: cssVar.colorSuccess,
+                      color: cssVar.colorSuccessBg,
                       cursor: 'pointer',
                     }}
                   />
@@ -142,7 +115,7 @@ const DataStatistics = memo<Omit<FlexboxProps, 'children'>>(({ style, ...rest })
         return (
           <Flexbox className={styles.card} flex={1} gap={2} key={item.key}>
             <Flexbox horizontal>
-              <div className={styles.count}>{formatNumber(item.count)}</div>
+              <div className={styles.count}>{formatShortenNumber(item.count)}</div>
             </Flexbox>
             <div className={styles.title}>{item.title}</div>
           </Flexbox>

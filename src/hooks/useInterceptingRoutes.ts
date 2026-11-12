@@ -1,46 +1,26 @@
 import { useMemo } from 'react';
-import urlJoin from 'url-join';
+import { useLocation } from 'react-router';
 
-import { INBOX_SESSION_ID } from '@/const/session';
+import { useWorkspaceAwareNavigate } from '@/features/Workspace/useWorkspaceAwareNavigate';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { useQueryRoute } from '@/hooks/useQueryRoute';
-import { useGlobalStore } from '@/store/global';
-import { ChatSettingsTabs, SettingsTabs, SidebarTabKey } from '@/store/global/initialState';
-import { useSessionStore } from '@/store/session';
+import { useAgentStore } from '@/store/agent';
+import { ChatSettingsTabs } from '@/store/global/initialState';
 
-export const useOpenSettings = (tab: SettingsTabs = SettingsTabs.Common) => {
-  const activeId = useSessionStore((s) => s.activeId);
-  const router = useQueryRoute();
-  const mobile = useIsMobile();
+export const useOpenChatSettings = (tab: ChatSettingsTabs = ChatSettingsTabs.Opening) => {
+  const activeAgentId = useAgentStore((s) => s.activeAgentId);
 
-  return useMemo(() => {
-    if (mobile) {
-      return () => router.push(urlJoin('/settings', tab));
-    } else {
-      // use Intercepting Routes on Desktop
-      return () => router.push('/settings/modal', { query: { session: activeId, tab } });
-    }
-  }, [mobile, tab, activeId, router]);
-};
-
-export const useOpenChatSettings = (tab: ChatSettingsTabs = ChatSettingsTabs.Meta) => {
-  const activeId = useSessionStore((s) => s.activeId);
-  const openSettings = useOpenSettings(SettingsTabs.Agent);
-  const router = useQueryRoute();
-  const mobile = useIsMobile();
+  const isMobile = useIsMobile();
+  const navigate = useWorkspaceAwareNavigate();
+  const location = useLocation();
 
   return useMemo(() => {
-    if (activeId === INBOX_SESSION_ID) {
-      useGlobalStore.setState({
-        sidebarKey: SidebarTabKey.Setting,
-      });
-      return openSettings;
-    }
-    if (mobile) {
-      return () => router.push('/chat/settings');
-    } else {
-      // use Intercepting Routes on Desktop
-      return () => router.push('/chat/settings/modal', { query: { session: activeId, tab } });
-    }
-  }, [openSettings, mobile, activeId, router, tab]);
+    if (isMobile)
+      return () => navigate(`/agent/${activeAgentId}/settings?showMobileWorkspace=true`);
+
+    return () => {
+      void import('@/routes/(main)/agent/profile/features/AgentSettings').then((m) =>
+        m.openAgentSettingsModal(),
+      );
+    };
+  }, [activeAgentId, navigate, location.pathname, tab, isMobile]);
 };

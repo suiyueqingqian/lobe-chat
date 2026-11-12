@@ -1,24 +1,20 @@
+import SiBrave from '@icons-pack/react-simple-icons/icons/SiBrave';
+import SiFirefox from '@icons-pack/react-simple-icons/icons/SiFirefox';
+import SiGooglechrome from '@icons-pack/react-simple-icons/icons/SiGooglechrome';
+import SiOpera from '@icons-pack/react-simple-icons/icons/SiOpera';
+import SiSafari from '@icons-pack/react-simple-icons/icons/SiSafari';
+import SiSamsung from '@icons-pack/react-simple-icons/icons/SiSamsung';
 import React, { memo } from 'react';
 
-import Brave from './components/Brave';
-import Chrome from './components/Chrome';
-import Chromium from './components/Chromium';
-import Edge from './components/Edge';
-import Firefox from './components/Firefox';
-import Opera from './components/Opera';
-import Safari from './components/Safari';
-import Samsung from './components/Samsung';
-
 const lastVersion = {
-  'Brave': Brave,
-  'Chrome': Chrome,
-  'Chromium': Chromium,
-  'Edge': Edge,
-  'Firefox': Firefox,
-  'Mobile Safari': Safari,
-  'Opera': Opera,
-  'Safari': Safari,
-  'Samsung': Samsung,
+  'Brave': SiBrave,
+  'Chrome': SiGooglechrome,
+  'Chromium': SiGooglechrome,
+  'Firefox': SiFirefox,
+  'Mobile Safari': SiSafari,
+  'Opera': SiOpera,
+  'Safari': SiSafari,
+  'Samsung': SiSamsung,
 };
 
 export type Browsers = keyof typeof lastVersion;
@@ -35,16 +31,5 @@ export const BrowserIcon = memo<BrowserIconProps>(({ browser, className, style, 
 
   if (!Component) return null;
 
-  return (
-    <Component
-      className={className}
-      height={size}
-      style={{
-        ...style,
-        minHeight: size,
-        minWidth: size,
-      }}
-      width={size}
-    />
-  );
+  return <Component className={className} size={size} style={style} />;
 });

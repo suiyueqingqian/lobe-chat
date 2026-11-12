@@ -1,3 +1,7 @@
-import dynamic from 'next/dynamic';
+import { redirect } from 'next/navigation';
 
-export default dynamic(() => import('@/components/404'));
+export const dynamic = 'force-static';
+
+export default function GlobalNotFound() {
+  redirect('/');
+}

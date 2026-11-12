@@ -1,85 +1,61 @@
-import { useRouter } from 'next/navigation';
-import { memo } from 'react';
-import { Flexbox } from 'react-layout-kit';
+import { Flexbox } from '@lobehub/ui';
+import { type FC } from 'react';
 
-import BrandWatermark from '@/components/BrandWatermark';
-import Menu from '@/components/Menu';
+import BusinessPanelContent from '@/business/client/features/User/BusinessPanelContent';
+import UserPanelAccountSection from '@/business/client/features/User/UserPanelAccountSection';
+import UserPanelStatistics from '@/business/client/features/User/UserPanelStatistics';
+import UserPanelWorkspaceSection from '@/business/client/features/User/UserPanelWorkspaceSection';
+import Menu, { type MenuProps } from '@/components/Menu';
+import { isDesktop } from '@/const/version';
+import UserInfo from '@/features/User/UserInfo';
+import { useSignOut } from '@/hooks/useSignOut';
+import { serverConfigSelectors, useServerConfigStore } from '@/store/serverConfig';
 import { useUserStore } from '@/store/user';
 import { authSelectors } from '@/store/user/selectors';
 
-import DataStatistics from '../DataStatistics';
-import UserInfo from '../UserInfo';
 import UserLoginOrSignup from '../UserLoginOrSignup';
-import LangButton from './LangButton';
-import ThemeButton from './ThemeButton';
 import { useMenu } from './useMenu';
 
-const PanelContent = memo<{ closePopover: () => void }>(({ closePopover }) => {
-  const router = useRouter();
+const PanelContent: FC<{ closePopover: () => void }> = ({ closePopover }) => {
   const isLoginWithAuth = useUserStore(authSelectors.isLoginWithAuth);
-  const [openSignIn, signOut, openUserProfile, enableAuth, enabledNextAuth] = useUserStore((s) => [
-    s.openLogin,
-    s.logout,
-    s.openUserProfile,
-    s.enableAuth(),
-    s.enabledNextAuth,
-  ]);
+  const openSignIn = useUserStore((s) => s.openLogin);
+  const enableBusinessFeatures = useServerConfigStore(serverConfigSelectors.enableBusinessFeatures);
   const { mainItems, logoutItems } = useMenu();
-
-  const handleOpenProfile = () => {
-    if (!enableAuth) return;
-    openUserProfile();
-    closePopover();
-  };
+  const signOut = useSignOut();
 
   const handleSignIn = () => {
     openSignIn();
     closePopover();
   };
 
-  const handleSignOut = () => {
-    signOut();
+  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     closePopover();
-    // NextAuth doesn't need to redirect to login page
-    if (enabledNextAuth) return;
-    router.push('/login');
+
+    if (key === 'logout') void signOut();
   };
 
   return (
-    <Flexbox gap={2} style={{ minWidth: 300 }}>
-      {!enableAuth ? (
+    // lobe-ui List rows carry no outer padding, so the panel keeps a 4px bottom
+    // inset (matching the rows' 4px side inset) or the last row sits on the edge.
+    <Flexbox gap={2} paddingBlock={'0 4px'} style={{ minWidth: 300 }}>
+      {isDesktop || isLoginWithAuth ? (
         <>
-          <UserInfo />
-          <DataStatistics />
-        </>
-      ) : isLoginWithAuth ? (
-        <>
-          <UserInfo onClick={handleOpenProfile} />
-          <DataStatistics />
+          {/* The section below opens with gap + divider margin (6px), so a 6px bottom
+              padding keeps the header's space below the avatar equal to the 12px above. */}
+          <UserInfo avatarProps={{ clickable: false }} paddingBlock={'12px 6px'} />
+          <UserPanelStatistics />
+          {enableBusinessFeatures && <BusinessPanelContent />}
+          <UserPanelWorkspaceSection onSwitch={closePopover} />
         </>
       ) : (
         <UserLoginOrSignup onClick={handleSignIn} />
       )}
 
-      <Menu items={mainItems} onClick={closePopover} />
-      <Flexbox
-        align={'center'}
-        horizontal
-        justify={'space-between'}
-        style={isLoginWithAuth ? { paddingRight: 6 } : { padding: '6px 6px 6px 16px' }}
-      >
-        {isLoginWithAuth ? (
-          <Menu items={logoutItems} onClick={handleSignOut} />
-        ) : (
-          <BrandWatermark />
-        )}
-        <Flexbox align={'center'} flex={'none'} gap={6} horizontal>
-          <LangButton />
-          <ThemeButton />
-        </Flexbox>
-      </Flexbox>
+      <Menu items={[...(mainItems ?? []), ...(logoutItems ?? [])]} onClick={handleMenuClick} />
+
+      <UserPanelAccountSection onNavigate={closePopover} />
     </Flexbox>
   );
-});
+};
 
 export default PanelContent;

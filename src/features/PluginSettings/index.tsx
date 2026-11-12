@@ -1,16 +1,19 @@
-import { PluginSchema } from '@lobehub/chat-plugin-sdk';
-import { Form, Markdown } from '@lobehub/ui';
-import { Form as AForm } from 'antd';
-import { createStyles } from 'antd-style';
+import { type ToolManifestSettings } from '@lobechat/types';
+import {
+  // oxlint-disable-next-line stylex-migration/no-emotion-styles -- rendered Markdown paragraphs get no className
+  createStaticStyles,
+  Markdown,
+} from '@lobehub/ui';
+import { Form, useForm } from '@lobehub/ui/form';
 import isEqual from 'fast-deep-equal';
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 
 import { useToolStore } from '@/store/tool';
 import { pluginSelectors } from '@/store/tool/selectors';
 
-import PluginSettingRender from './PluginSettingRender';
+import ItemRender from '../../components/JSONSchemaConfig/ItemRender';
 
-export const transformPluginSettings = (pluginSettings: PluginSchema) => {
+export const transformPluginSettings = (pluginSettings: ToolManifestSettings) => {
   if (!pluginSettings?.properties) return [];
 
   return Object.entries(pluginSettings.properties).map(([name, i]) => ({
@@ -28,59 +31,58 @@ export const transformPluginSettings = (pluginSettings: PluginSchema) => {
 
 interface PluginSettingsConfigProps {
   id: string;
-  schema: PluginSchema;
+  schema: ToolManifestSettings;
 }
 
-const useStyles = createStyles(({ css, token }) => ({
+const fallback = createStaticStyles(({ css, cssVar }) => ({
   markdown: css`
     p {
-      color: ${token.colorTextDescription};
+      color: ${cssVar.colorTextDescription};
     }
   `,
 }));
 
 const PluginSettingsConfig = memo<PluginSettingsConfigProps>(({ schema, id }) => {
-  const { styles } = useStyles();
-
   const [updatePluginSettings] = useToolStore((s) => [s.updatePluginSettings]);
   const pluginSetting = useToolStore(pluginSelectors.getPluginSettingsById(id), isEqual);
 
-  const [form] = AForm.useForm();
-  useEffect(() => {
-    form.setFieldsValue(pluginSetting);
-  }, []);
+  const form = useForm({
+    initialValues: pluginSetting,
+    onSubmit: async (v) => {
+      await updatePluginSettings(id, v);
+    },
+  });
 
   const items = transformPluginSettings(schema);
 
   return (
-    <Form form={form} layout={'vertical'} style={{ width: '100%' }}>
-      {items.map((item) => (
-        <Form.Item
-          desc={
-            item.desc && (
-              <Markdown className={styles.markdown} variant={'chat'}>
-                {item.desc as string}
-              </Markdown>
-            )
-          }
-          key={item.label}
-          label={item.label}
-          tag={item.tag}
-        >
-          <PluginSettingRender
-            defaultValue={pluginSetting[item.name]}
+    <Form
+      footer={<Form.SubmitFooter />}
+      form={form}
+      gap={16}
+      itemsType={'flat'}
+      layout={'vertical'}
+      variant={'borderless'}
+      items={items.map((item) => ({
+        children: (
+          <ItemRender
             enum={item.enum}
             format={item.format}
             maximum={item.maximum}
             minimum={item.minimum}
-            onChange={(value) => {
-              updatePluginSettings(id, { [item.name]: value });
-            }}
             type={item.type as any}
           />
-        </Form.Item>
-      ))}
-    </Form>
+        ),
+        desc: item.desc && (
+          <Markdown className={fallback.markdown} variant={'chat'}>
+            {item.desc as string}
+          </Markdown>
+        ),
+        label: item.label,
+        name: item.name,
+        tag: item.tag,
+      }))}
+    />
   );
 });
 

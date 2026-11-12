@@ -1,32 +1,42 @@
-import { useRef } from 'react';
+import { useMemo } from 'react';
 
+import { useSingleton } from '@/hooks/useSingleton';
 import {
   getBrowser,
   getPlatform,
+  isArc,
   isInStandaloneMode,
   isSonomaOrLaterSafari,
 } from '@/utils/platform';
 
 export const usePlatform = () => {
-  const platform = useRef(getPlatform());
-  const browser = useRef(getBrowser());
+  const platform = useSingleton(getPlatform);
+  const browser = useSingleton(getBrowser);
 
   const platformInfo = {
-    isApple: platform.current && ['Mac OS', 'iOS'].includes(platform.current),
-    isChrome: browser.current === 'Chrome',
-    isChromium: browser.current && ['Chrome', 'Edge', 'Opera', 'Brave'].includes(browser.current),
-    isEdge: browser.current === 'Edge',
-    isIOS: platform.current === 'iOS',
-    isMacOS: platform.current === 'Mac OS',
+    isAndroid: platform?.toLowerCase() === 'android',
+    isApple: platform && ['mac os', 'ios'].includes(platform?.toLowerCase()),
+    isArc: isArc(),
+    isChrome: browser?.toLowerCase() === 'chrome',
+    isChromium: browser && ['chrome', 'edge', 'opera', 'brave'].includes(browser?.toLowerCase()),
+    isEdge: browser?.toLowerCase() === 'edge',
+    isFirefox: browser?.toLowerCase() === 'firefox',
+    isIOS: platform?.toLowerCase() === 'ios',
+    isMacOS: platform?.toLowerCase() === 'mac os',
     isPWA: isInStandaloneMode(),
-    isSafari: browser.current === 'Safari',
+    isSafari: browser?.toLowerCase() === 'safari',
     isSonomaOrLaterSafari: isSonomaOrLaterSafari(),
   };
 
-  return {
-    ...platformInfo,
-    isSupportInstallPWA:
-      (platformInfo.isChromium && !platformInfo.isIOS) ||
-      (platformInfo.isMacOS && platformInfo.isSonomaOrLaterSafari),
-  };
+  return useMemo(
+    () => ({
+      ...platformInfo,
+      isSupportInstallPWA:
+        !platformInfo.isArc &&
+        !platformInfo.isFirefox &&
+        ((platformInfo.isChromium && !platformInfo.isIOS) ||
+          (platformInfo.isMacOS && platformInfo.isSonomaOrLaterSafari)),
+    }),
+    [],
+  );
 };
